@@ -23,9 +23,9 @@ use NChat\Storage\DbalChatStorage;
  *       websocket:
  *           host: soketi
  *           port: 6001
- *           appId: netteshop
- *           key: netteshop-key
- *           secret: netteshop-secret
+ *       appId: my-app-id
+ *           key: my-app-key
+ *           secret: my-app-secret
  *       storage: NChat\Storage\DbalChatStorage  # or your own implementation
  *       ai:
  *           enabled: false
@@ -39,9 +39,9 @@ class ChatExtension extends CompilerExtension
 			'websocket' => Expect::structure([
 				'host' => Expect::string('soketi'),
 				'port' => Expect::int(6001),
-				'appId' => Expect::string('netteshop'),
-				'key' => Expect::string('netteshop-key'),
-				'secret' => Expect::string('netteshop-secret'),
+				'appId' => Expect::string('app-id'),
+				'key' => Expect::string('app-key'),
+				'secret' => Expect::string('app-secret'),
 			]),
 			'storage' => Expect::string(DbalChatStorage::class),
 			'ai' => Expect::structure([
