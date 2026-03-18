@@ -1,0 +1,21 @@
+{
+    "name": "jansuchanek/nchat",
+    "description": "Reusable real-time admin chat extension for Nette Framework with WebSocket support (Soketi/Pusher), typing indicators, presence, read receipts, and optional AI responder.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1",
+        "nette/di": "^3.1",
+        "nette/http": "^3.2",
+        "nette/application": "^3.2"
+    },
+    "suggest": {
+        "doctrine/orm": "For entity management",
+        "doctrine/dbal": "For raw SQL queries"
+    },
+    "autoload": {
+        "psr-4": {
+            "NChat\\": "src/"
+        }
+    }
+}
