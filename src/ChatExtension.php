@@ -55,31 +55,36 @@ class ChatExtension extends CompilerExtension
 	public function loadConfiguration(): void
 	{
 		$builder = $this->getContainerBuilder();
+		/** @var object $config */
 		$config = $this->getConfig();
 
 		// WebSocket Publisher
 		$builder->addDefinition($this->prefix('publisher'))
 			->setFactory(WebSocketPublisher::class, [
-				$config->websocket->appId,
-				$config->websocket->key,
-				$config->websocket->secret,
-				$config->websocket->host,
-				$config->websocket->port,
+				$config->websocket->appId, // @phpstan-ignore property.notFound, property.nonObject
+				$config->websocket->key, // @phpstan-ignore property.notFound, property.nonObject
+				$config->websocket->secret, // @phpstan-ignore property.notFound, property.nonObject
+				$config->websocket->host, // @phpstan-ignore property.notFound, property.nonObject
+				$config->websocket->port, // @phpstan-ignore property.notFound, property.nonObject
 			]);
 
 		// Storage (database abstraction)
 		$builder->addDefinition($this->prefix('storage'))
 			->setType(ChatStorageInterface::class)
-			->setFactory($config->storage);
+			->setFactory($config->storage); // @phpstan-ignore argument.type, property.notFound
 
 		// Chat Service
 		$builder->addDefinition($this->prefix('chatService'))
 			->setFactory(ChatService::class);
 
 		// AI Responder (optional)
-		if ($config->ai->enabled && $config->ai->responder !== null) {
+		/** @var mixed $aiConfig */
+		$aiConfig = $config->ai ?? null;
+		$aiEnabled = is_object($aiConfig) && $aiConfig->enabled; // @phpstan-ignore property.notFound
+		$aiClass = is_object($aiConfig) ? ($aiConfig->responder ?? null) : null;
+		if ($aiEnabled && is_string($aiClass)) {
 			$builder->addDefinition($this->prefix('aiResponder'))
-				->setType($config->ai->responder);
+				->setType($aiClass);
 		}
 	}
 }

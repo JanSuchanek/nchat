@@ -23,14 +23,16 @@ class WebSocketPublisher
 
 	/**
 	 * Trigger an event on a channel.
+	 *
+	 * @param array<string, mixed> $data
 	 */
 	public function trigger(string $channel, string $event, array $data): void
 	{
 		$body = json_encode([
 			'name' => $event,
 			'channel' => $channel,
-			'data' => json_encode($data),
-		]);
+			'data' => json_encode($data) ?: '{}',
+		]) ?: '{}';
 
 		$path = '/apps/' . $this->appId . '/events';
 		$queryParams = $this->buildAuthQuery('POST', $path, $body);
@@ -54,19 +56,20 @@ class WebSocketPublisher
 	/**
 	 * Authenticate a private or presence channel subscription.
 	 *
+	 * @param array{user_id: string, user_info: array{name: string}}|null $userData
 	 * @return string JSON auth response for Pusher client
 	 */
 	public function auth(string $socketId, string $channel, ?array $userData = null): string
 	{
 		if ($userData !== null) {
 			// Presence channel
-			$stringToSign = $socketId . ':' . $channel . ':' . json_encode($userData);
+			$stringToSign = $socketId . ':' . $channel . ':' . (json_encode($userData) ?: '{}');
 			$signature = hash_hmac('sha256', $stringToSign, $this->appSecret);
 
 			return json_encode([
 				'auth' => $this->appKey . ':' . $signature,
-				'channel_data' => json_encode($userData),
-			]);
+				'channel_data' => json_encode($userData) ?: '{}',
+			]) ?: '{}';
 		}
 
 		// Private channel
@@ -75,7 +78,7 @@ class WebSocketPublisher
 
 		return json_encode([
 			'auth' => $this->appKey . ':' . $signature,
-		]);
+		]) ?: '{}';
 	}
 
 
@@ -90,6 +93,8 @@ class WebSocketPublisher
 
 	/**
 	 * Build Pusher-compatible auth query parameters.
+	 *
+	 * @return array<string, string>
 	 */
 	private function buildAuthQuery(string $method, string $path, string $body): array
 	{

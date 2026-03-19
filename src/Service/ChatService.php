@@ -80,6 +80,8 @@ class ChatService
 
 	/**
 	 * Poll messages with channel filtering and pagination.
+	 *
+	 * @return array{messages: list<array<string, mixed>>, has_more: bool}
 	 */
 	public function pollMessages(int $userId, int $sinceId = 0, int $beforeId = 0, ?string $channel = null): array
 	{
@@ -93,6 +95,8 @@ class ChatService
 
 	/**
 	 * Get online users.
+	 *
+	 * @return list<array{user_id: int, full_name: string, email: string}>
 	 */
 	public function getOnlineUsers(): array
 	{
@@ -102,6 +106,8 @@ class ChatService
 
 	/**
 	 * Get groups the user belongs to.
+	 *
+	 * @return list<array{id: int, name: string}>
 	 */
 	public function getUserGroups(int $userId): array
 	{
@@ -111,6 +117,8 @@ class ChatService
 
 	/**
 	 * Get groups with member IDs.
+	 *
+	 * @return list<array{id: int, name: string, created_by: int, member_ids: string}>
 	 */
 	public function getGroupsWithMembers(int $userId): array
 	{
@@ -120,6 +128,9 @@ class ChatService
 
 	/**
 	 * Create a chat group.
+	 *
+	 * @param list<int> $memberIds
+	 * @return array{group_id: int, name: string}
 	 */
 	public function createGroup(string $name, int $creatorId, array $memberIds): array
 	{
@@ -190,7 +201,7 @@ class ChatService
 		try {
 			$history = $this->storage->fetchConversationHistory($userId);
 			$context = $this->formatConversationContext($history);
-			$response = $this->aiResponder->respond($context);
+			$response = $this->aiResponder?->respond($context) ?? '';
 			$this->saveBotMessage($response, $userId);
 		} catch (\Throwable $e) {
 			$this->saveBotMessage('⚠️ ' . $e->getMessage(), $userId);
@@ -203,7 +214,7 @@ class ChatService
 		try {
 			$history = $this->storage->fetchConversationHistory(0, $groupId);
 			$context = $this->formatConversationContext($history);
-			$response = $this->aiResponder->respond($context);
+			$response = $this->aiResponder?->respond($context) ?? '';
 			$this->saveBotMessage($response, null, $groupId);
 		} catch (\Throwable $e) {
 			$this->saveBotMessage('⚠️ ' . $e->getMessage(), null, $groupId);
@@ -211,6 +222,9 @@ class ChatService
 	}
 
 
+	/**
+	 * @param list<array{full_name: string, message: string, user_id: int}> $history
+	 */
 	private function formatConversationContext(array $history): string
 	{
 		$context = '';

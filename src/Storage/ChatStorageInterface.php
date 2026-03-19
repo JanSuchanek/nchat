@@ -26,7 +26,7 @@ interface ChatStorageInterface
 	 *
 	 * @param int $userId Current user ID (for DM filtering)
 	 * @param array{since_id?: int, before_id?: int, channel?: ?string, limit?: int} $criteria
-	 * @return array{messages: array, has_more: bool}
+	 * @return array{messages: list<array<string, mixed>>, has_more: bool}
 	 */
 	public function fetchMessages(int $userId, array $criteria = []): array;
 
@@ -58,6 +58,7 @@ interface ChatStorageInterface
 	/**
 	 * Create a group and add members.
 	 *
+	 * @param list<int> $memberIds
 	 * @return array{group_id: int, name: string}
 	 */
 	public function createGroup(string $name, int $creatorId, array $memberIds): array;

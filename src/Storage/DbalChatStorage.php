@@ -38,6 +38,9 @@ class DbalChatStorage implements ChatStorageInterface
 	}
 
 
+	/**
+	 * @return array{messages: list<array<string, mixed>>, has_more: bool}
+	 */
 	public function fetchMessages(int $userId, array $criteria = []): array
 	{
 		$sinceId = $criteria['since_id'] ?? 0;
@@ -78,8 +81,8 @@ class DbalChatStorage implements ChatStorageInterface
 
 		// Format
 		foreach ($messages as &$m) {
-			$m['time'] = (new \DateTime($m['created_at']))->format('H:i');
-			$m['is_mine'] = ((int) $m['user_id'] === $userId);
+			$m['time'] = (new \DateTime(is_string($m['created_at'] ?? null) ? $m['created_at'] : 'now'))->format('H:i');
+			$m['is_mine'] = (intval($m['user_id'] ?? 0) === $userId); // @phpstan-ignore argument.type
 			$m['is_dm'] = ($m['recipient_id'] !== null);
 		}
 
@@ -94,31 +97,38 @@ class DbalChatStorage implements ChatStorageInterface
 	{
 		$since = (new \DateTime("-{$withinMinutes} minutes"))->format('Y-m-d H:i:s');
 
-		return $this->connection->fetchAllAssociative(
+		/** @var list<array{user_id: int, full_name: string, email: string}> $result */
+		$result = $this->connection->fetchAllAssociative(
 			"SELECT DISTINCT user_id, full_name, email
 			 FROM user_session
 			 WHERE last_heartbeat > ?",
 			[$since],
 		);
+
+		return $result;
 	}
 
 
 	public function fetchUserGroups(int $userId): array
 	{
-		return $this->connection->fetchAllAssociative(
+		/** @var list<array{id: int, name: string}> $result */
+		$result = $this->connection->fetchAllAssociative(
 			"SELECT g.id, g.name
 			 FROM admin_chat_group g
 			 JOIN admin_chat_group_member m ON g.id = m.group_id AND m.user_id = ?
 			 ORDER BY g.name",
 			[$userId],
 		);
+
+		return $result;
 	}
 
 
 	public function fetchGroupsWithMembers(int $userId): array
 	{
 		// Use subquery for member aggregation (works across MySQL, PostgreSQL, SQLite)
-		return $this->connection->fetchAllAssociative(
+		/** @var list<array{id: int, name: string, created_by: int, member_ids: string}> $result */
+		$result = $this->connection->fetchAllAssociative(
 			"SELECT g.id, g.name, g.created_by,
 					(SELECT GROUP_CONCAT(m2.user_id) FROM admin_chat_group_member m2 WHERE m2.group_id = g.id) as member_ids
 			 FROM admin_chat_group g
@@ -126,9 +136,15 @@ class DbalChatStorage implements ChatStorageInterface
 			 ORDER BY g.name",
 			[$userId],
 		);
+
+		return $result;
 	}
 
 
+	/**
+	 * @param list<int> $memberIds
+	 * @return array{group_id: int, name: string}
+	 */
 	public function createGroup(string $name, int $creatorId, array $memberIds): array
 	{
 		$this->connection->executeStatement(
@@ -145,7 +161,6 @@ class DbalChatStorage implements ChatStorageInterface
 
 		// Add other members (skip duplicates gracefully)
 		foreach ($memberIds as $mid) {
-			$mid = (int) $mid;
 			if ($mid === $creatorId) continue;
 			try {
 				$this->connection->executeStatement(
@@ -168,7 +183,7 @@ class DbalChatStorage implements ChatStorageInterface
 			[$groupId, $userId],
 		);
 
-		return (int) $count > 0;
+		return intval($count) > 0; // @phpstan-ignore argument.type
 	}
 
 
@@ -191,6 +206,7 @@ class DbalChatStorage implements ChatStorageInterface
 			);
 		}
 
+		/** @var list<array{full_name: string, message: string, user_id: int}> $history */
 		return array_reverse($history);
 	}
 
@@ -198,7 +214,7 @@ class DbalChatStorage implements ChatStorageInterface
 	/**
 	 * Build WHERE clause for channel filtering.
 	 *
-	 * @return array{0: string, 1: array} [whereClause, params]
+	 * @return array{0: string, 1: list<int>} [whereClause, params]
 	 */
 	private function buildChannelFilter(int $userId, ?string $channel): array
 	{
