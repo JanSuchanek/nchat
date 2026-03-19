@@ -22,8 +22,8 @@ class DbalChatStorage implements ChatStorageInterface
 	public function saveMessage(array $data): int
 	{
 		$this->connection->executeStatement(
-			"INSERT INTO admin_chat_message (user_id, full_name, email, message, recipient_id, group_id, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?, NOW())",
+			"INSERT INTO admin_chat_message (user_id, full_name, email, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
 			[
 				$data['user_id'],
 				$data['full_name'],
@@ -31,6 +31,10 @@ class DbalChatStorage implements ChatStorageInterface
 				$data['message'],
 				$data['recipient_id'] ?? null,
 				$data['group_id'] ?? null,
+				$data['attachment_path'] ?? null,
+				$data['attachment_name'] ?? null,
+				$data['attachment_size'] ?? null,
+				$data['attachment_type'] ?? null,
 			],
 		);
 
@@ -53,7 +57,7 @@ class DbalChatStorage implements ChatStorageInterface
 
 		if ($beforeId > 0) {
 			$messages = $this->connection->fetchAllAssociative(
-				"SELECT id, user_id, full_name, message, recipient_id, group_id, created_at
+				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, created_at
 				 FROM admin_chat_message
 				 WHERE id < ? AND {$channelWhere}
 				 ORDER BY id DESC LIMIT {$limit}",
@@ -62,7 +66,7 @@ class DbalChatStorage implements ChatStorageInterface
 			$messages = array_reverse($messages);
 		} elseif ($sinceId === 0) {
 			$messages = $this->connection->fetchAllAssociative(
-				"SELECT id, user_id, full_name, message, recipient_id, group_id, created_at
+				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, created_at
 				 FROM admin_chat_message
 				 WHERE {$channelWhere}
 				 ORDER BY id DESC LIMIT {$limit}",
@@ -71,7 +75,7 @@ class DbalChatStorage implements ChatStorageInterface
 			$messages = array_reverse($messages);
 		} else {
 			$messages = $this->connection->fetchAllAssociative(
-				"SELECT id, user_id, full_name, message, recipient_id, group_id, created_at
+				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, created_at
 				 FROM admin_chat_message
 				 WHERE id > ? AND {$channelWhere}
 				 ORDER BY id ASC LIMIT {$limit}",

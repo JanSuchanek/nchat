@@ -15,7 +15,7 @@ interface ChatStorageInterface
 	/**
 	 * Save a chat message.
 	 *
-	 * @param array{user_id: int, full_name: string, email: string, message: string, recipient_id: ?int, group_id: ?int} $data
+	 * @param array{user_id: int, full_name: string, email: string, message: string, recipient_id: ?int, group_id: ?int, attachment_path?: ?string, attachment_name?: ?string, attachment_size?: ?int, attachment_type?: ?string} $data
 	 * @return int Inserted message ID
 	 */
 	public function saveMessage(array $data): int;

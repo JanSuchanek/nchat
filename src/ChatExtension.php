@@ -8,6 +8,7 @@ use Nette\DI\CompilerExtension;
 use Nette\Schema\Expect;
 use Nette\Schema\Schema;
 use NChat\Service\ChatService;
+use NChat\Service\FileUploader;
 use NChat\Service\WebSocketPublisher;
 use NChat\Storage\ChatStorageInterface;
 use NChat\Storage\DbalChatStorage;
@@ -23,10 +24,13 @@ use NChat\Storage\DbalChatStorage;
  *       websocket:
  *           host: soketi
  *           port: 6001
- *       appId: my-app-id
+ *           appId: my-app-id
  *           key: my-app-key
  *           secret: my-app-secret
- *       storage: NChat\Storage\DbalChatStorage  # or your own implementation
+ *       storage: NChat\Storage\DbalChatStorage
+ *       upload:
+ *           dir: %wwwDir%/uploads/chat
+ *           maxSize: 10485760
  *       ai:
  *           enabled: false
  *           responder: null
@@ -44,6 +48,11 @@ class ChatExtension extends CompilerExtension
 				'secret' => Expect::string('app-secret'),
 			]),
 			'storage' => Expect::string(DbalChatStorage::class),
+			'upload' => Expect::structure([
+				'dir' => Expect::string()->nullable()->default(null),
+				'maxSize' => Expect::int(10_485_760),
+				'allowedTypes' => Expect::listOf('string')->default([]),
+			]),
 			'ai' => Expect::structure([
 				'enabled' => Expect::bool(false),
 				'responder' => Expect::string()->nullable()->default(null),
@@ -72,6 +81,17 @@ class ChatExtension extends CompilerExtension
 		$builder->addDefinition($this->prefix('storage'))
 			->setType(ChatStorageInterface::class)
 			->setFactory($config->storage); // @phpstan-ignore argument.type, property.notFound
+
+		// File Uploader (optional — only if dir is configured)
+		/** @var mixed $uploadConfig */
+		$uploadConfig = $config->upload ?? null;
+		$uploadDir = is_object($uploadConfig) ? ($uploadConfig->dir ?? null) : null;
+		if (is_string($uploadDir)) {
+			$maxSize = is_object($uploadConfig) ? ($uploadConfig->maxSize ?? 10_485_760) : 10_485_760;
+			$allowedTypes = is_object($uploadConfig) ? ($uploadConfig->allowedTypes ?? []) : [];
+			$builder->addDefinition($this->prefix('fileUploader'))
+				->setFactory(FileUploader::class, [$uploadDir, $maxSize, $allowedTypes]);
+		}
 
 		// Chat Service
 		$builder->addDefinition($this->prefix('chatService'))

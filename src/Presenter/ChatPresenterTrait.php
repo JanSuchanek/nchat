@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NChat\Presenter;
 
 use NChat\Service\ChatService;
+use NChat\Service\FileUploader;
 
 /**
  * Chat presenter trait — drop-in actions for any Nette presenter.
@@ -18,6 +19,7 @@ use NChat\Service\ChatService;
 trait ChatPresenterTrait
 {
 	private ChatService $chatService;
+	private ?FileUploader $fileUploader = null;
 
 
 	public function injectChatService(ChatService $chatService): void
@@ -26,18 +28,24 @@ trait ChatPresenterTrait
 	}
 
 
+	public function injectFileUploader(?FileUploader $fileUploader = null): void
+	{
+		$this->fileUploader = $fileUploader;
+	}
+
+
 	/**
 	 * List of chat action names that should be accessible to all logged-in users.
 	 */
 	public static function getChatActionNames(): array
 	{
-		return ['chatSend', 'chatPoll', 'chatAuth', 'chatOnline', 'chatGroupCreate', 'chatGroups'];
+		return ['chatSend', 'chatPoll', 'chatAuth', 'chatOnline', 'chatGroupCreate', 'chatGroups', 'chatDownload'];
 	}
 
 
 	/**
 	 * Send a chat message (POST).
-	 * Params: message, to (DM recipient), group (group ID).
+	 * Params: message, to (DM recipient), group (group ID), file (optional attachment).
 	 */
 	public function actionChatSend(): void
 	{
@@ -47,15 +55,30 @@ trait ChatPresenterTrait
 			return;
 		}
 
-		$message = trim($this->getHttpRequest()->getPost('message') ?? '');
-		if ($message === '') {
+		$request = $this->getHttpRequest();
+		$message = trim($request->getPost('message') ?? '');
+
+		// Handle file upload
+		$attachment = null;
+		$file = $request->getFile('file');
+		if ($file !== null && $this->fileUploader !== null) {
+			try {
+				$attachment = $this->fileUploader->upload($file);
+			} catch (\RuntimeException $e) {
+				$this->sendJson(['status' => 'error', 'message' => $e->getMessage()]);
+				return;
+			}
+		}
+
+		// Require message or attachment
+		if ($message === '' && $attachment === null) {
 			$this->sendJson(['status' => 'empty']);
 			return;
 		}
 
-		$recipientId = $this->getHttpRequest()->getPost('to');
+		$recipientId = $request->getPost('to');
 		$recipientId = $recipientId !== null && $recipientId !== '' ? (int) $recipientId : null;
-		$groupId = $this->getHttpRequest()->getPost('group');
+		$groupId = $request->getPost('group');
 		$groupId = $groupId !== null && $groupId !== '' ? (int) $groupId : null;
 
 		$userId = (int) $user->getId();
@@ -68,6 +91,7 @@ trait ChatPresenterTrait
 			$message,
 			$recipientId,
 			$groupId,
+			$attachment,
 		);
 
 		$this->sendJson(['status' => 'ok', 'id' => $result['id']]);
@@ -197,5 +221,48 @@ trait ChatPresenterTrait
 
 		$online = $this->chatService->getOnlineUsers();
 		$this->sendJson(['status' => 'ok', 'online' => $online]);
+	}
+
+
+	/**
+	 * Download a chat attachment (GET). Params: path.
+	 */
+	public function actionChatDownload(): void
+	{
+		$user = $this->getUser();
+		if (!$user->isLoggedIn()) {
+			$this->getHttpResponse()->setCode(403);
+			$this->sendJson(['error' => 'Not authenticated']);
+			return;
+		}
+
+		$path = $this->getHttpRequest()->getQuery('path');
+		if (!is_string($path) || $path === '' || $this->fileUploader === null) {
+			$this->getHttpResponse()->setCode(400);
+			$this->sendJson(['error' => 'Invalid request']);
+			return;
+		}
+
+		// Security: prevent directory traversal
+		if (str_contains($path, '..') || str_contains($path, "\0")) {
+			$this->getHttpResponse()->setCode(400);
+			$this->sendJson(['error' => 'Invalid path']);
+			return;
+		}
+
+		if (!$this->fileUploader->fileExists($path)) {
+			$this->getHttpResponse()->setCode(404);
+			$this->sendJson(['error' => 'File not found']);
+			return;
+		}
+
+		$absPath = $this->fileUploader->getAbsolutePath($path);
+		$name = basename($path);
+		$mime = mime_content_type($absPath) ?: 'application/octet-stream';
+
+		$this->getHttpResponse()->setContentType($mime);
+		$this->getHttpResponse()->setHeader('Content-Disposition', 'inline; filename="' . $name . '"');
+		$this->getHttpResponse()->setHeader('Content-Length', (string) filesize($absPath));
+		$this->sendResponse(new \Nette\Application\Responses\FileResponse($absPath, $name, $mime));
 	}
 }

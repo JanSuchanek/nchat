@@ -41,6 +41,22 @@ class ChatMessage
 	#[ORM\Column(type: 'integer', nullable: true)]
 	private ?int $groupId = null;
 
+	/** Relative path to uploaded file */
+	#[ORM\Column(type: 'string', length: 500, nullable: true)]
+	private ?string $attachmentPath = null;
+
+	/** Original filename */
+	#[ORM\Column(type: 'string', length: 255, nullable: true)]
+	private ?string $attachmentName = null;
+
+	/** File size in bytes */
+	#[ORM\Column(type: 'integer', nullable: true)]
+	private ?int $attachmentSize = null;
+
+	/** MIME type */
+	#[ORM\Column(type: 'string', length: 100, nullable: true)]
+	private ?string $attachmentType = null;
+
 	#[ORM\Column(type: 'datetime_immutable')]
 	private \DateTimeImmutable $createdAt;
 
@@ -67,4 +83,15 @@ class ChatMessage
 	public function getRecipientId(): ?int { return $this->recipientId; }
 	public function getGroupId(): ?int { return $this->groupId; }
 	public function getCreatedAt(): \DateTimeImmutable { return $this->createdAt; }
+
+	public function setAttachmentPath(?string $p): self { $this->attachmentPath = $p; return $this; }
+	public function setAttachmentName(?string $n): self { $this->attachmentName = $n; return $this; }
+	public function setAttachmentSize(?int $s): self { $this->attachmentSize = $s; return $this; }
+	public function setAttachmentType(?string $t): self { $this->attachmentType = $t; return $this; }
+
+	public function getAttachmentPath(): ?string { return $this->attachmentPath; }
+	public function getAttachmentName(): ?string { return $this->attachmentName; }
+	public function getAttachmentSize(): ?int { return $this->attachmentSize; }
+	public function getAttachmentType(): ?string { return $this->attachmentType; }
+	public function hasAttachment(): bool { return $this->attachmentPath !== null; }
 }

@@ -17,6 +17,7 @@ class ChatService
 	public function __construct(
 		private ChatStorageInterface $storage,
 		private WebSocketPublisher $publisher,
+		private ?FileUploader $fileUploader = null, // @phpstan-ignore property.onlyWritten
 		private ?AiResponderInterface $aiResponder = null,
 	) {}
 
@@ -24,6 +25,7 @@ class ChatService
 	/**
 	 * Send a chat message.
 	 *
+	 * @param ?array{path: string, name: string, size: int, type: string} $attachment
 	 * @return array{id: int, wsChannel: string}
 	 */
 	public function sendMessage(
@@ -33,19 +35,29 @@ class ChatService
 		string $message,
 		?int $recipientId = null,
 		?int $groupId = null,
+		?array $attachment = null,
 	): array {
-		$msgId = $this->storage->saveMessage([
+		$msgData = [
 			'user_id' => $userId,
 			'full_name' => $fullName,
 			'email' => $email,
 			'message' => $message,
 			'recipient_id' => $recipientId,
 			'group_id' => $groupId,
-		]);
+		];
+
+		if ($attachment !== null) {
+			$msgData['attachment_path'] = $attachment['path'];
+			$msgData['attachment_name'] = $attachment['name'];
+			$msgData['attachment_size'] = $attachment['size'];
+			$msgData['attachment_type'] = $attachment['type'];
+		}
+
+		$msgId = $this->storage->saveMessage($msgData);
 
 		// Publish via WebSocket
 		$wsChannel = $this->getChatChannel($recipientId, $groupId, $userId);
-		$msgData = [
+		$wsPayload = [
 			'id' => $msgId,
 			'user_id' => $userId,
 			'full_name' => $fullName,
@@ -54,10 +66,13 @@ class ChatService
 			'group_id' => $groupId,
 			'time' => (new \DateTime())->format('H:i'),
 			'is_dm' => $recipientId !== null,
+			'attachment_name' => $attachment['name'] ?? null,
+			'attachment_type' => $attachment['type'] ?? null,
+			'attachment_size' => $attachment['size'] ?? null,
 		];
 
 		try {
-			$this->publisher->trigger($wsChannel, 'new-message', $msgData);
+			$this->publisher->trigger($wsChannel, 'new-message', $wsPayload);
 		} catch (\Throwable) {}
 
 		// AI bot in DM
