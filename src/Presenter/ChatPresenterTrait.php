@@ -39,7 +39,7 @@ trait ChatPresenterTrait
 	 */
 	public static function getChatActionNames(): array
 	{
-		return ['chatSend', 'chatPoll', 'chatAuth', 'chatOnline', 'chatGroupCreate', 'chatGroups', 'chatDownload'];
+		return ['chatSend', 'chatPoll', 'chatAuth', 'chatOnline', 'chatGroupCreate', 'chatGroups', 'chatDownload', 'chatEdit', 'chatDelete', 'chatReaction', 'chatMarkRead', 'chatUnread'];
 	}
 
 
@@ -264,5 +264,124 @@ trait ChatPresenterTrait
 		$this->getHttpResponse()->setHeader('Content-Disposition', 'inline; filename="' . $name . '"');
 		$this->getHttpResponse()->setHeader('Content-Length', (string) filesize($absPath));
 		$this->sendResponse(new \Nette\Application\Responses\FileResponse($absPath, $name, $mime));
+	}
+
+
+	/**
+	 * Edit own message (POST: message_id, text).
+	 */
+	public function actionChatEdit(): void
+	{
+		$user = $this->getUser();
+		if (!$user->isLoggedIn()) {
+			$this->sendJson(['status' => 'unauthorized']);
+			return;
+		}
+
+		$request = $this->getHttpRequest();
+		$messageId = (int) ($request->getPost('message_id') ?? 0);
+		$newText = trim($request->getPost('text') ?? '');
+
+		if ($messageId === 0 || $newText === '') {
+			$this->sendJson(['status' => 'error', 'message' => 'Missing params']);
+			return;
+		}
+
+		$ok = $this->chatService->editMessage($messageId, (int) $user->getId(), $newText);
+		$this->sendJson(['status' => $ok ? 'ok' : 'error']);
+	}
+
+
+	/**
+	 * Delete own message (POST: message_id).
+	 */
+	public function actionChatDelete(): void
+	{
+		$user = $this->getUser();
+		if (!$user->isLoggedIn()) {
+			$this->sendJson(['status' => 'unauthorized']);
+			return;
+		}
+
+		$messageId = (int) ($this->getHttpRequest()->getPost('message_id') ?? 0);
+		if ($messageId === 0) {
+			$this->sendJson(['status' => 'error', 'message' => 'Missing message_id']);
+			return;
+		}
+
+		$ok = $this->chatService->deleteMessage($messageId, (int) $user->getId());
+		$this->sendJson(['status' => $ok ? 'ok' : 'error']);
+	}
+
+
+	/**
+	 * Toggle emoji reaction (POST: message_id, emoji, action=add|remove).
+	 */
+	public function actionChatReaction(): void
+	{
+		$user = $this->getUser();
+		if (!$user->isLoggedIn()) {
+			$this->sendJson(['status' => 'unauthorized']);
+			return;
+		}
+
+		$request = $this->getHttpRequest();
+		$messageId = (int) ($request->getPost('message_id') ?? 0);
+		$emoji = trim($request->getPost('emoji') ?? '');
+		$action = $request->getPost('action') ?? 'add';
+
+		if ($messageId === 0 || $emoji === '') {
+			$this->sendJson(['status' => 'error', 'message' => 'Missing params']);
+			return;
+		}
+
+		$userId = (int) $user->getId();
+		if ($action === 'remove') {
+			$this->chatService->removeReaction($messageId, $userId, $emoji);
+		} else {
+			$this->chatService->addReaction($messageId, $userId, $emoji);
+		}
+
+		$this->sendJson(['status' => 'ok']);
+	}
+
+
+	/**
+	 * Mark messages as read (POST: message_ids=[...]).
+	 */
+	public function actionChatMarkRead(): void
+	{
+		$user = $this->getUser();
+		if (!$user->isLoggedIn()) {
+			$this->sendJson(['status' => 'unauthorized']);
+			return;
+		}
+
+		$raw = $this->getHttpRequest()->getPost('message_ids');
+		if (!is_string($raw) || $raw === '') {
+			$this->sendJson(['status' => 'ok']);
+			return;
+		}
+
+		/** @var list<int> $ids */
+		$ids = array_map('intval', explode(',', $raw));
+		$this->chatService->markRead((int) $user->getId(), $ids);
+		$this->sendJson(['status' => 'ok']);
+	}
+
+
+	/**
+	 * Fetch per-channel unread counts (GET).
+	 */
+	public function actionChatUnread(): void
+	{
+		$user = $this->getUser();
+		if (!$user->isLoggedIn()) {
+			$this->sendJson(['status' => 'unauthorized']);
+			return;
+		}
+
+		$counts = $this->chatService->getUnreadCounts((int) $user->getId());
+		$this->sendJson(['status' => 'ok', 'unread' => $counts]);
 	}
 }

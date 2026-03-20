@@ -57,7 +57,7 @@ class DbalChatStorage implements ChatStorageInterface
 
 		if ($beforeId > 0) {
 			$messages = $this->connection->fetchAllAssociative(
-				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, created_at
+				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, edited_at, deleted_at, created_at
 				 FROM admin_chat_message
 				 WHERE id < ? AND {$channelWhere}
 				 ORDER BY id DESC LIMIT {$limit}",
@@ -66,7 +66,7 @@ class DbalChatStorage implements ChatStorageInterface
 			$messages = array_reverse($messages);
 		} elseif ($sinceId === 0) {
 			$messages = $this->connection->fetchAllAssociative(
-				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, created_at
+				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, edited_at, deleted_at, created_at
 				 FROM admin_chat_message
 				 WHERE {$channelWhere}
 				 ORDER BY id DESC LIMIT {$limit}",
@@ -75,7 +75,7 @@ class DbalChatStorage implements ChatStorageInterface
 			$messages = array_reverse($messages);
 		} else {
 			$messages = $this->connection->fetchAllAssociative(
-				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, created_at
+				"SELECT id, user_id, full_name, message, recipient_id, group_id, attachment_path, attachment_name, attachment_size, attachment_type, edited_at, deleted_at, created_at
 				 FROM admin_chat_message
 				 WHERE id > ? AND {$channelWhere}
 				 ORDER BY id ASC LIMIT {$limit}",
@@ -88,6 +88,11 @@ class DbalChatStorage implements ChatStorageInterface
 			$m['time'] = (new \DateTime(is_string($m['created_at'] ?? null) ? $m['created_at'] : 'now'))->format('H:i');
 			$m['is_mine'] = (intval($m['user_id'] ?? 0) === $userId); // @phpstan-ignore argument.type
 			$m['is_dm'] = ($m['recipient_id'] !== null);
+			$m['is_edited'] = ($m['edited_at'] !== null);
+			$m['is_deleted'] = ($m['deleted_at'] !== null);
+			if ($m['is_deleted']) {
+				$m['message'] = 'Zpráva byla smazána';
+			}
 		}
 
 		return [
@@ -239,5 +244,122 @@ class DbalChatStorage implements ChatStorageInterface
 			"(group_id IS NULL AND (recipient_id IS NULL OR recipient_id = ? OR user_id = ?))",
 			[$userId, $userId],
 		];
+	}
+
+
+	public function editMessage(int $messageId, int $userId, string $newText): bool
+	{
+		$affected = $this->connection->executeStatement(
+			'UPDATE admin_chat_message SET message = ?, edited_at = NOW() WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+			[$newText, $messageId, $userId],
+		);
+
+		return $affected > 0;
+	}
+
+
+	public function deleteMessage(int $messageId, int $userId): bool
+	{
+		$affected = $this->connection->executeStatement(
+			'UPDATE admin_chat_message SET deleted_at = NOW() WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
+			[$messageId, $userId],
+		);
+
+		return $affected > 0;
+	}
+
+
+	public function addReaction(int $messageId, int $userId, string $emoji): void
+	{
+		$this->connection->executeStatement(
+			'INSERT IGNORE INTO admin_chat_reaction (message_id, user_id, emoji) VALUES (?, ?, ?)',
+			[$messageId, $userId, $emoji],
+		);
+	}
+
+
+	public function removeReaction(int $messageId, int $userId, string $emoji): void
+	{
+		$this->connection->executeStatement(
+			'DELETE FROM admin_chat_reaction WHERE message_id = ? AND user_id = ? AND emoji = ?',
+			[$messageId, $userId, $emoji],
+		);
+	}
+
+
+	/**
+	 * @return array<int, list<array{user_id: int, emoji: string}>>
+	 */
+	public function fetchReactions(array $messageIds): array
+	{
+		if ($messageIds === []) {
+			return [];
+		}
+
+		$placeholders = implode(',', array_fill(0, count($messageIds), '?'));
+		/** @var list<array{message_id: int, user_id: int, emoji: string}> $rows */
+		$rows = $this->connection->fetchAllAssociative(
+			"SELECT message_id, user_id, emoji FROM admin_chat_reaction WHERE message_id IN ({$placeholders}) ORDER BY created_at",
+			$messageIds,
+		);
+
+		$result = [];
+		foreach ($rows as $row) {
+			$mid = (int) $row['message_id'];
+			$result[$mid][] = ['user_id' => (int) $row['user_id'], 'emoji' => $row['emoji']];
+		}
+
+		return $result;
+	}
+
+
+	public function markRead(int $userId, array $messageIds): void
+	{
+		if ($messageIds === []) {
+			return;
+		}
+
+		foreach ($messageIds as $msgId) {
+			$this->connection->executeStatement(
+				'INSERT IGNORE INTO admin_chat_read_receipt (message_id, user_id) VALUES (?, ?)',
+				[$msgId, $userId],
+			);
+		}
+	}
+
+
+	/**
+	 * @return array<string, int>
+	 */
+	public function fetchUnreadCounts(int $userId): array
+	{
+		// Unread = messages from others where no read receipt exists
+		// Group by channel identifier
+		/** @var list<array{channel: string, cnt: int|string}> $rows */
+		$rows = $this->connection->fetchAllAssociative(
+			"SELECT
+				CASE
+					WHEN m.group_id IS NOT NULL THEN CONCAT('g', m.group_id)
+					WHEN m.recipient_id IS NOT NULL AND m.user_id != ? THEN CAST(m.user_id AS CHAR)
+					WHEN m.recipient_id IS NOT NULL AND m.user_id = ? THEN CAST(m.recipient_id AS CHAR)
+					ELSE 'all'
+				END AS channel,
+				COUNT(*) AS cnt
+			FROM admin_chat_message m
+			LEFT JOIN admin_chat_read_receipt r ON r.message_id = m.id AND r.user_id = ?
+			WHERE m.user_id != ? AND m.deleted_at IS NULL AND r.id IS NULL
+			  AND (m.recipient_id IS NULL OR m.recipient_id = ? OR m.group_id IN (
+			      SELECT group_id FROM admin_chat_group_member WHERE user_id = ?
+			  ))
+			GROUP BY channel",
+			[$userId, $userId, $userId, $userId, $userId, $userId],
+		);
+
+		$result = [];
+		foreach ($rows as $row) {
+			$result[(string) $row['channel']] = (int) $row['cnt'];
+		}
+
+		return $result;
 	}
 }

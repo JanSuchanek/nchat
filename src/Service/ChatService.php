@@ -279,4 +279,62 @@ class ChatService
 			]);
 		} catch (\Throwable) {}
 	}
+
+
+	/**
+	 * Edit a message (only own).
+	 */
+	public function editMessage(int $messageId, int $userId, string $newText): bool
+	{
+		return $this->storage->editMessage($messageId, $userId, $newText);
+	}
+
+
+	/**
+	 * Soft-delete a message (only own).
+	 */
+	public function deleteMessage(int $messageId, int $userId): bool
+	{
+		return $this->storage->deleteMessage($messageId, $userId);
+	}
+
+
+	/**
+	 * Add emoji reaction.
+	 */
+	public function addReaction(int $messageId, int $userId, string $emoji): void
+	{
+		$this->storage->addReaction($messageId, $userId, $emoji);
+	}
+
+
+	/**
+	 * Remove emoji reaction.
+	 */
+	public function removeReaction(int $messageId, int $userId, string $emoji): void
+	{
+		$this->storage->removeReaction($messageId, $userId, $emoji);
+	}
+
+
+	/**
+	 * Mark messages as read.
+	 *
+	 * @param list<int> $messageIds
+	 */
+	public function markRead(int $userId, array $messageIds): void
+	{
+		$this->storage->markRead($userId, $messageIds);
+	}
+
+
+	/**
+	 * Get per-channel unread counts.
+	 *
+	 * @return array<string, int>
+	 */
+	public function getUnreadCounts(int $userId): array
+	{
+		return $this->storage->fetchUnreadCounts($userId);
+	}
 }

@@ -76,4 +76,53 @@ interface ChatStorageInterface
 	 * @return list<array{full_name: string, message: string, user_id: int}>
 	 */
 	public function fetchConversationHistory(int $userId, ?int $groupId = null, int $limit = 10): array;
+
+
+	/**
+	 * Edit a message text (only by owner).
+	 */
+	public function editMessage(int $messageId, int $userId, string $newText): bool;
+
+
+	/**
+	 * Soft-delete a message (only by owner).
+	 */
+	public function deleteMessage(int $messageId, int $userId): bool;
+
+
+	/**
+	 * Add an emoji reaction to a message.
+	 */
+	public function addReaction(int $messageId, int $userId, string $emoji): void;
+
+
+	/**
+	 * Remove an emoji reaction from a message.
+	 */
+	public function removeReaction(int $messageId, int $userId, string $emoji): void;
+
+
+	/**
+	 * Fetch reactions for given message IDs.
+	 *
+	 * @param list<int> $messageIds
+	 * @return array<int, list<array{user_id: int, emoji: string}>>
+	 */
+	public function fetchReactions(array $messageIds): array;
+
+
+	/**
+	 * Mark messages as read by user.
+	 *
+	 * @param list<int> $messageIds
+	 */
+	public function markRead(int $userId, array $messageIds): void;
+
+
+	/**
+	 * Fetch unread message counts per channel for a user.
+	 *
+	 * @return array<string, int> channel => count
+	 */
+	public function fetchUnreadCounts(int $userId): array;
 }
